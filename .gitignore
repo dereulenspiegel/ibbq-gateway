@@ -1,0 +1,4 @@
+build/
+.vscode/
+spiffs.bin
+main/wifi_creds.h
