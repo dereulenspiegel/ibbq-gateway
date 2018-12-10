@@ -20,6 +20,27 @@ static const char *TAG = "webserver";
 #define EXAMPLE_MDNS_INSTANCE "ibbq"
 static const char c_config_hostname[] = "ibbq";
 
+static cJSON *serialize_system(ibbq_state_t *bbq_state)
+{
+    cJSON *system = cJSON_CreateObject();
+
+    wifi_ap_record_t ap_info;
+    ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&ap_info));
+
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    char serial[12];
+    snprintf(serial, sizeof(serial), "%02X%02X%02X%02X%02X%02X", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
+    cJSON_AddStringToObject(system, "serial", serial);
+    cJSON_AddBoolToObject(system, "ibbq_connected", bbq_state->connected);
+    cJSON_AddNumberToObject(system, "ibbq_rssi", bbq_state->rssi);
+    cJSON_AddNumberToObject(system, "soc", bbq_state->battery_percent);
+    cJSON_AddNumberToObject(system, "rssi", ap_info.rssi);
+    cJSON_AddStringToObject(system, "unit", "C");
+
+    return system;
+}
+
 static void initialise_mdns(void)
 {
     ESP_LOGI(TAG, "Starting to announce our existence via mDNS");
@@ -100,23 +121,8 @@ esp_err_t data_handler(httpd_req_t *req)
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
 
     cJSON *root = cJSON_CreateObject();
-    cJSON *system = cJSON_CreateObject();
+    cJSON *system = serialize_system(bbq_state);
     cJSON_AddItemToObject(root, "system", system);
-
-    wifi_ap_record_t ap_info;
-    ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&ap_info));
-
-    uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    char serial[12];
-    snprintf(serial, sizeof(serial), "%02X%02X%02X%02X%02X%02X", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
-    cJSON_AddStringToObject(system, "serial", serial);
-    cJSON_AddBoolToObject(system, "ibbq_connected", bbq_state->connected);
-    cJSON_AddNumberToObject(system, "ibbq_rssi", bbq_state->rssi);
-    cJSON_AddNumberToObject(system, "soc", bbq_state->battery_percent);
-    // TODO get WiFi RSSI
-    cJSON_AddNumberToObject(system, "rssi", ap_info.rssi);
-    cJSON_AddStringToObject(system, "unit", "C");
 
     cJSON *channels = cJSON_CreateArray();
     cJSON_AddItemToObject(root, "channel", channels);
@@ -141,6 +147,7 @@ esp_err_t data_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, jsonString, strlen(jsonString));
     cJSON_Delete(root);
+    ESP_LOGI(TAG, "Returning JSON for probe data: %s", jsonString);
     free(jsonString);
     ESP_LOGI(TAG, "Free heap after request: %d", esp_get_free_heap_size());
     return ESP_OK;
@@ -173,6 +180,7 @@ esp_err_t data_set_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
     }
+    ESP_LOGI(TAG, "Received settings: %s", buf);
 
     cJSON *root = cJSON_Parse(buf);
     if (root == NULL)
@@ -265,6 +273,8 @@ httpd_uri_t data_set_route = {
 */
 esp_err_t settings_get_handler(httpd_req_t *req)
 {
+    ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
+
     system_settings_t settings = {};
     strncpy(settings.hostname, "iBBQ-Gateway\0", 13);
     strncpy(settings.unit, "C\0", 2);
@@ -272,7 +282,7 @@ esp_err_t settings_get_handler(httpd_req_t *req)
     //loadSettings(SYSTEM_SETTINGS, &settings);
 
     cJSON *root = cJSON_CreateObject();
-    cJSON *system = cJSON_CreateObject();
+    cJSON *system = serialize_system(bbq_state);
     cJSON_AddItemToObject(root, "system", system);
     cJSON_AddStringToObject(system, "host", settings.hostname);
     cJSON_AddStringToObject(system, "unit", settings.unit);
@@ -289,6 +299,7 @@ esp_err_t settings_get_handler(httpd_req_t *req)
     httpd_resp_send(req, jsonString, strlen(jsonString));
 
     cJSON_Delete(root);
+    ESP_LOGI(TAG, "Returning settings: %s", jsonString);
     free(jsonString);
 
     return ESP_OK;
@@ -322,7 +333,7 @@ esp_err_t setchannels_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
     }
-
+    ESP_LOGI(TAG, "Received channel config: %s", buf);
     cJSON *root = cJSON_Parse(buf);
     if (root == NULL)
     {
@@ -368,11 +379,18 @@ esp_err_t setchannels_handler(httpd_req_t *req)
     cJSON *color = cJSON_GetObjectItemCaseSensitive(root, "color");
     if (color != NULL && cJSON_IsString(color))
     {
-        strncpy(probe_data->color, name->valuestring, sizeof(probe_data->color));
+        strncpy(probe_data->color, color->valuestring, sizeof(probe_data->color));
         probe_data->color[sizeof(probe_data->color) - 1] = '\0';
     }
 
     // TODO handle alarms
+
+    ESP_LOGI(TAG, "Updating probe %d with name %s, min %f, max %f and color %s",
+             probeId,
+             bbq_state->probes[probeId].name,
+             bbq_state->probes[probeId].min,
+             bbq_state->probes[probeId].max,
+             bbq_state->probes[probeId].color);
 
     saveSettings(CHANNEL_SETTINGS, bbq_state->probes);
 
@@ -406,6 +424,7 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
         httpd_register_uri_handler(server, &data_route);
         data_set_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &data_set_route);
+        settings_get_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &settings_get_route);
         setchannels_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &setchannels_route);

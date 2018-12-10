@@ -2914,8 +2914,8 @@
 			showLoader('true');
 			loadJSON('data', '', '3000', function (response) {
 				jr = JSON.parse(response);
-				jr.channel[channel].min = byId('temp_min').value;
-				jr.channel[channel].max = byId('temp_max').value;
+				jr.channel[channel].min = parseInt(byId('temp_min').value);
+				jr.channel[channel].max = parseInt(byId('temp_max').value);
 				jr.channel[channel].name = byId('channel_name').value;
 				jr.channel[channel].typ = byId('sensor').value;
 				var push = 0;

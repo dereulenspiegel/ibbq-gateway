@@ -1,7 +1,8 @@
 set(COMPONENT_SRCS 	"main.cpp"
 			"wifi.cpp"
 			"ibbq.cpp"
-			"webserver.cpp")
+			"webserver.cpp"
+			"settings.cpp")
 set(COMPONENT_ADD_INCLUDEDIRS ".")
 
 register_component()

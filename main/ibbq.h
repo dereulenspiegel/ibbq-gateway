@@ -18,7 +18,7 @@ extern "C"
     {
         float min;
         float max;
-        char color[7];
+        char color[8];
         uint8_t alarm;
         char name[128];
     } probe_data_t;

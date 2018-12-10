@@ -232,7 +232,7 @@ static void device_discovered(void *handler_args, esp_event_base_t base, int32_t
 
     //ESP_LOGI(TAG, "Discovered device: %s", dev->toString().c_str());
 
-    //ESP_LOGI(TAG, "Connecting to device address (%s)", dev->getAddress().toString().c_str());
+    ESP_LOGI(TAG, "Connecting to device address (%s)", dev->getAddress().toString().c_str());
 
     if (!ctx->pClient->connect(dev->getAddress()))
     {
