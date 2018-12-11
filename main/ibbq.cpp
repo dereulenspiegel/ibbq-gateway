@@ -34,7 +34,7 @@ ESP_EVENT_DEFINE_BASE(IBBQ_EVENTS)
 
 esp_event_loop_handle_t ble_loop;
 
-static *ibbq_state ctx;
+static ibbq_state_t *ctx;
 
 static void battery_timer_callback(void *arg);
 static esp_timer_handle_t battery_timer;

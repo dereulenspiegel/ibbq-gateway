@@ -14,7 +14,7 @@
 
 static const char *TAG = "wifi station";
 
-static EventGroupHandle_t s_wifi_event_group;
+//static EventGroupHandle_t s_wifi_event_group;
 
 static int s_retry_num = 0;
 
@@ -44,18 +44,16 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
         ESP_LOGW(TAG, "Disconnected from WiFi");
         if (nCtx->webserver)
         {
-            ESP_LOGI(TAG, "Stopping webserver");
+            ESP_LOGD(TAG, "Stopping webserver");
             stop_webserver(nCtx->webserver);
             nCtx->webserver = NULL;
         }
-        if (s_retry_num < CONFIG_ESP_MAXIMUM_RETRY)
-        {
-            esp_wifi_connect();
-            xEventGroupClearBits(s_wifi_event_group, CONFIG_ESP_MAXIMUM_RETRY);
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        }
-        ESP_LOGI(TAG, "connect to the AP fail\n");
+
+        ESP_LOGI(TAG, "Retrying connection");
+        esp_wifi_connect();
+        //xEventGroupClearBits(s_wifi_event_group, CONFIG_ESP_MAXIMUM_RETRY);
+        s_retry_num++;
+        ESP_LOGD(TAG, "retry to connect to the AP");
         break;
     }
     default:
@@ -67,7 +65,7 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
 
 void wifi_init_sta(network_context_t *ctx)
 {
-    s_wifi_event_group = xEventGroupCreate();
+    //s_wifi_event_group = xEventGroupCreate();
     tcpip_adapter_init();
     ESP_ERROR_CHECK(esp_event_loop_init(esp_wifi_event_handler, ctx));
 
