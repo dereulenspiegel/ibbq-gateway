@@ -70,7 +70,7 @@ static void initialise_mdns(void)
     ESP_ERROR_CHECK(mdns_hostname_set(hostname));
     ESP_LOGI(TAG, "mdns hostname set to: [%s]", hostname);
     //set default mDNS instance name
-    ESP_ERROR_CHECK(mdns_instance_name_set(EXAMPLE_MDNS_INSTANCE));
+    ESP_ERROR_CHECK(mdns_instance_name_set(sys_settings->hostname));
 
     //structure with TXT records
     // TODO set usable values
@@ -78,7 +78,7 @@ static void initialise_mdns(void)
     //    {"board", "esp32"}};
 
     //initialize service
-    ESP_ERROR_CHECK(mdns_service_add("ibbq-server", "_http", "_tcp", 80, NULL /*serviceTxtData*/, 1));
+    ESP_ERROR_CHECK(mdns_service_add("ibbq-server", "_http", "_tcp", 80, NULL /*serviceTxtData*/, 0));
     //add another TXT item
     ESP_ERROR_CHECK(mdns_service_txt_item_set("_http", "_tcp", "path", "/"));
     //change TXT item value
@@ -523,7 +523,7 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
 {
     static httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 12;
     config.stack_size = 8192;
 
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -546,7 +546,7 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
         httpd_register_uri_handler(server, &set_system_route);
         get_system_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &get_system_route);
-        //initialise_mdns();
+        initialise_mdns();
         return server;
     }
     else
@@ -559,8 +559,10 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
 
 void stop_webserver(httpd_handle_t server)
 {
+    ESP_LOGD(TAG, "Freesing mDNS");
     mdns_free();
     // Stop the httpd server
+    ESP_LOGD(TAG, "Stopping httpd");
     esp_err_t ret = httpd_stop(server);
     if (ret != ESP_OK)
     {
