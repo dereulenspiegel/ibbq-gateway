@@ -20,6 +20,49 @@
   font-style: normal;
 }
 
+@font-face {
+	font-family: 'fontello';
+	src: url('fontello.ttf?43100686') format('truetype');
+	font-weight: normal;
+  	font-style: normal;
+}
+
+.bt-icon
+    {
+      font-family: "fontello";
+      font-style: normal;
+      font-weight: normal;
+      speak: none;
+
+      display: inline-block;
+      text-decoration: inherit;
+      width: 1em;
+      margin-right: .2em;
+      text-align: center;
+      /* opacity: .8; */
+
+      /* For safety - reset parent styles, that can break glyph codes*/
+      font-variant: normal;
+      text-transform: none;
+
+      /* fix buttons height, for twitter bootstrap */
+      line-height: 1em;
+
+      /* Animation center compensation - margins should be symmetric */
+      /* remove if not needed */
+      margin-left: .2em;
+
+      /* You can be more comfortable with increased icons size */
+      /* font-size: 120%; */
+
+      /* Font smoothing. That was taken from TWBS */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+
+      /* Uncomment for 3D effect */
+      /* text-shadow: 1px 1px 1px rgba(127, 127, 127, 0.3); */
+    }
+
 [class^="icon-"], [class*=" icon-"] {
   /* use !important to prevent issues with browser extensions that change fonts */
   font-family: 'nano' !important;
@@ -985,6 +1028,12 @@
 		.battery {
 			text-align:center;
 			padding:14px 5px;
+			float:right;
+		}
+
+		.bluetooth {
+			text-align:center;
+			padding: 14px 5px;
 			float:right;
 		}
 		
@@ -3278,6 +3327,7 @@
 		}
 
 		var showBatteryWlanIcon = true;
+		var iBBQConnected = false;
 
 		function setshowBatteryWlanIcon() {
 			showBatteryWlanIcon = false;
@@ -3337,6 +3387,15 @@
 			}
 		}
 
+		function getBluetoothIcon(dbm) {
+			data = '';
+			if (iBBQConnected === true) {
+				return '<span class="bt-icon icon-bluetooth-connected"></span>';
+			} else {
+				return '<span class="bt-icon icon-bluetooth-disconnected"></span>';
+			}
+		}
+
 		function getWifiSecureIcon(data) {
 			var lock = getIcon('lock');
 			var unlock = getIcon('unlock');
@@ -3369,6 +3428,9 @@
 			} else {
 				loadJSON('data', '', '3000', function (response) {
 					jr = JSON.parse(response);
+					iBBQConnected = jr.system.ibbq_connected;
+					var bt_rssi = jr.system.ibbq_rssi;
+					byClass("bluetooth")[0].innerHTML = getBluetoothIcon(bt_rssi);
 					BatteryIcon = getBatteryIcon(jr.system.soc, jr.system.charge);
 					byClass("battery")[0].innerHTML = BatteryIcon;
 					RSSIIcon = getRSSIIcon(jr.system.rssi);

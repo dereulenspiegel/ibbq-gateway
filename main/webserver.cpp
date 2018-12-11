@@ -116,6 +116,12 @@ httpd_uri_t font_route = {
     .handler = file_handler,
     .user_ctx = (char *)"/spiffs/nano.ttf"};
 
+httpd_uri_t fontello_route = {
+    .uri = "/fontello.ttf",
+    .method = HTTP_GET,
+    .handler = file_handler,
+    .user_ctx = (char *)"/spiffs/fontello.ttf"};
+
 esp_err_t data_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
@@ -420,6 +426,7 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
         ESP_LOGI(TAG, "Registering URI handlers");
         httpd_register_uri_handler(server, &index_route);
         httpd_register_uri_handler(server, &font_route);
+        httpd_register_uri_handler(server, &fontello_route);
         data_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &data_route);
         data_set_route.user_ctx = (void *)state;
