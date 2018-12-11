@@ -35,8 +35,8 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
         nCtx->webserver = init_webserver(nCtx->bbq_state);
         break;
     case SYSTEM_EVENT_AP_STA_GOT_IP6:
-        ip6_addr_t ip_info;
-        ESP_ERROR_CHECK(tcpip_adapter_get_ip6_linklocal(TCPIP_ADAPTER_IF_STA, &ip_info));
+        //ip6_addr_t ip_info;
+        //ESP_ERROR_CHECK(tcpip_adapter_get_ip6_linklocal(TCPIP_ADAPTER_IF_STA, &ip_info));
         //ESP_LOGI(TAG, "IPv6 address received: %s", IPV62STR(ip_info));
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:

@@ -5,6 +5,8 @@
 
 #define MAX_PROBE_COUNT 8
 
+#define MOCK_IBBQ
+
 #ifdef __cplusplus
 extern "C"
 {

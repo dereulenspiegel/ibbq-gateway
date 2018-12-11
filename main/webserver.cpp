@@ -18,7 +18,7 @@ static const char *TAG = "webserver";
 #define INDEX_FILE "/spiffs/index.html"
 
 #define EXAMPLE_MDNS_INSTANCE "ibbq"
-static const char c_config_hostname[] = "ibbq";
+//static const char c_config_hostname[] = "ibbq";
 
 static cJSON *serialize_system(ibbq_state_t *bbq_state)
 {
@@ -26,6 +26,9 @@ static cJSON *serialize_system(ibbq_state_t *bbq_state)
 
     wifi_ap_record_t ap_info;
     ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&ap_info));
+
+    system_settings_t *sys_settings = (system_settings_t *)malloc(sizeof(system_settings_t));
+    loadSettings(SYSTEM_SETTINGS, sys_settings);
 
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -36,23 +39,30 @@ static cJSON *serialize_system(ibbq_state_t *bbq_state)
     cJSON_AddNumberToObject(system, "ibbq_rssi", bbq_state->rssi);
     cJSON_AddNumberToObject(system, "soc", bbq_state->battery_percent);
     cJSON_AddNumberToObject(system, "rssi", ap_info.rssi);
-    cJSON_AddStringToObject(system, "unit", "C");
+    cJSON_AddStringToObject(system, "unit", sys_settings->unit);
+    cJSON_AddStringToObject(system, "ap", sys_settings->ap_name);
+    cJSON_AddStringToObject(system, "language", sys_settings->lang);
+    cJSON_AddStringToObject(system, "hwversion", "iBBQ-Gateway dev");
+    cJSON_AddStringToObject(system, "host", sys_settings->hostname);
+    cJSON_AddBoolToObject(system, "autoupd", false);
 
     return system;
 }
 
 static void initialise_mdns(void)
 {
+    system_settings_t *sys_settings = (system_settings_t *)malloc(sizeof(system_settings_t));
+    loadSettings(SYSTEM_SETTINGS, sys_settings);
+
     ESP_LOGI(TAG, "Starting to announce our existence via mDNS");
-    _Static_assert(sizeof(c_config_hostname) < CONFIG_MAIN_TASK_STACK_SIZE / 2, "Configured mDNS name consumes more than half of the stack. Please select a shorter host name or extend the main stack size please.");
-    const size_t config_hostname_len = sizeof(c_config_hostname) - 1; // without term char
-    char hostname[config_hostname_len + 1 + 3 * 2 + 1];               // adding underscore + 3 digits + term char
+    _Static_assert(sizeof(sys_settings->hostname) < CONFIG_MAIN_TASK_STACK_SIZE / 2, "Configured mDNS name consumes more than half of the stack. Please select a shorter host name or extend the main stack size please.");
+    const size_t config_hostname_len = sizeof(sys_settings->hostname) - 1; // without term char
+    char hostname[config_hostname_len + 1 + 3 * 2 + 1];                    // adding underscore + 3 digits + term char
     uint8_t mac[6];
 
     // adding 3 LSBs from mac addr to setup a board specific name
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    snprintf(hostname, sizeof(hostname), "%s_%02x%02X%02X", c_config_hostname, mac[3], mac[4], mac[5]);
-    ESP_LOGI(TAG, "Announcing hostname %s via mDNS", hostname);
+    snprintf(hostname, sizeof(hostname), "%s_%02x%02X%02X", sys_settings->hostname, mac[3], mac[4], mac[5]);
 
     //initialize mDNS
     ESP_ERROR_CHECK(mdns_init());
@@ -64,15 +74,16 @@ static void initialise_mdns(void)
 
     //structure with TXT records
     // TODO set usable values
-    mdns_txt_item_t serviceTxtData[1] = {
-        {"board", "esp32"}};
+    //mdns_txt_item_t serviceTxtData[1] = {
+    //    {"board", "esp32"}};
 
     //initialize service
-    ESP_ERROR_CHECK(mdns_service_add("ibbq-server", "_http", "_tcp", 80, serviceTxtData, 1));
+    ESP_ERROR_CHECK(mdns_service_add("ibbq-server", "_http", "_tcp", 80, NULL /*serviceTxtData*/, 1));
     //add another TXT item
     ESP_ERROR_CHECK(mdns_service_txt_item_set("_http", "_tcp", "path", "/"));
     //change TXT item value
     //ESP_ERROR_CHECK(mdns_service_txt_item_set("_http", "_tcp", "u", "admin"));
+    free(sys_settings);
 }
 
 esp_err_t file_handler(httpd_req_t *req)
@@ -258,6 +269,104 @@ httpd_uri_t data_set_route = {
     .handler = data_set_handler,
     .user_ctx = NULL};
 
+esp_err_t set_system_handler(httpd_req_t *req)
+{
+    system_settings *sys_settings = (system_settings_t *)malloc(sizeof(system_settings_t));
+    loadSettings(SYSTEM_SETTINGS, sys_settings);
+
+    char buf[2048];
+    int ret, remaining = req->content_len;
+
+    if (remaining > sizeof(buf))
+    {
+        ESP_LOGW(TAG, "Received request with %d bytes, which is larger than buf with %d bytes", remaining, sizeof(buf));
+        httpd_resp_set_status(req, "400");
+        return ESP_OK;
+    }
+
+    if ((ret = httpd_req_recv(req, buf,
+                              MIN(remaining, sizeof(buf)))) <= 0)
+    {
+        if (ret != HTTPD_SOCK_ERR_TIMEOUT)
+        {
+            return ESP_FAIL;
+        }
+    }
+    ESP_LOGI(TAG, "Received system settings: %s", buf);
+
+    cJSON *root = cJSON_Parse(buf);
+    if (root == NULL)
+    {
+        httpd_resp_set_status(req, "400");
+        httpd_resp_send_chunk(req, NULL, 0);
+        return ESP_OK;
+    }
+
+    cJSON *host = cJSON_GetObjectItemCaseSensitive(root, "host");
+    if (host != NULL && cJSON_IsString(host))
+    {
+        strncpy(sys_settings->hostname, host->valuestring, sizeof(sys_settings->hostname));
+        sys_settings->hostname[sizeof(sys_settings->hostname) - 1] = '\0';
+    }
+
+    cJSON *unit = cJSON_GetObjectItemCaseSensitive(root, "unit");
+    if (unit != NULL && cJSON_IsString(unit))
+    {
+        strncpy(sys_settings->unit, unit->valuestring, sizeof(sys_settings->unit));
+        sys_settings->unit[sizeof(sys_settings->unit) - 1] = '\0';
+    }
+
+    cJSON *lang = cJSON_GetObjectItemCaseSensitive(root, "language");
+    if (lang != NULL && cJSON_IsString(lang))
+    {
+        strncpy(sys_settings->lang, lang->valuestring, sizeof(sys_settings->lang));
+        sys_settings->lang[sizeof(sys_settings->lang) - 1] = '\0';
+    }
+
+    cJSON *ap_name = cJSON_GetObjectItemCaseSensitive(root, "ap_name");
+    if (ap_name != NULL && cJSON_IsString(ap_name))
+    {
+        strncpy(sys_settings->ap_name, ap_name->valuestring, sizeof(sys_settings->ap_name));
+        sys_settings->ap_name[sizeof(sys_settings->ap_name) - 1] = '\0';
+    }
+
+    cJSON_Delete(root);
+
+    saveSettings(SYSTEM_SETTINGS, sys_settings);
+    free(sys_settings);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+httpd_uri_t set_system_route = {
+    .uri = "/setsystem",
+    .method = HTTP_POST,
+    .handler = set_system_handler,
+    .user_ctx = NULL};
+
+esp_err_t get_system_handler(httpd_req_t *req)
+{
+    ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
+
+    cJSON *system = serialize_system(bbq_state);
+
+    char *jsonString = cJSON_Print(system);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, jsonString, strlen(jsonString));
+    cJSON_Delete(system);
+    free(jsonString);
+
+    return ESP_OK;
+}
+
+httpd_uri_t get_system_route = {
+
+    .uri = "/setsystem",
+    .method = HTTP_GET,
+    .handler = set_system_handler,
+    .user_ctx = NULL};
+
 /*
 {
     "system": {
@@ -281,17 +390,15 @@ esp_err_t settings_get_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
 
-    system_settings_t settings = {};
-    strncpy(settings.hostname, "iBBQ-Gateway\0", 13);
-    strncpy(settings.unit, "C\0", 2);
+    system_settings_t *settings = (system_settings_t *)malloc(sizeof(system_settings_t));
 
-    //loadSettings(SYSTEM_SETTINGS, &settings);
+    loadSettings(SYSTEM_SETTINGS, settings);
 
     cJSON *root = cJSON_CreateObject();
     cJSON *system = serialize_system(bbq_state);
     cJSON_AddItemToObject(root, "system", system);
-    cJSON_AddStringToObject(system, "host", settings.hostname);
-    cJSON_AddStringToObject(system, "unit", settings.unit);
+    cJSON_AddStringToObject(system, "host", settings->hostname);
+    cJSON_AddStringToObject(system, "unit", settings->unit);
 
     cJSON *sensors = cJSON_CreateArray();
     cJSON_AddItemToObject(root, "sensors", sensors);
@@ -416,6 +523,7 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
 {
     static httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 16;
     config.stack_size = 8192;
 
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -435,7 +543,10 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
         httpd_register_uri_handler(server, &settings_get_route);
         setchannels_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &setchannels_route);
-        initialise_mdns();
+        httpd_register_uri_handler(server, &set_system_route);
+        get_system_route.user_ctx = (void *)state;
+        httpd_register_uri_handler(server, &get_system_route);
+        //initialise_mdns();
         return server;
     }
     else

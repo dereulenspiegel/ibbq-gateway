@@ -1,5 +1,6 @@
 #include "ibbq.h"
 
+#ifndef MOCK_IBBQ
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <map>
@@ -33,7 +34,7 @@ ESP_EVENT_DEFINE_BASE(IBBQ_EVENTS)
 
 esp_event_loop_handle_t ble_loop;
 
-static ibbq_state ctx;
+static *ibbq_state ctx;
 
 static void battery_timer_callback(void *arg);
 static esp_timer_handle_t battery_timer;
@@ -68,7 +69,7 @@ static void realtimeDataCallback(
     size_t length,
     bool isNotify)
 {
-    ctx.probe_count = length / 2;
+    ctx->probe_count = length / 2;
 
     uint8_t probeId = 0;
     for (int i = 0; i < length; i += 2)
@@ -76,7 +77,7 @@ static void realtimeDataCallback(
         uint16_t val = littleEndianInt(&pData[i]);
         float temp = val / 10;
         ESP_LOGI(TAG, "Probe %d has value %f", probeId, temp);
-        ctx.temps[i] = temp;
+        ctx->temps[i] = temp;
         probeId++;
     }
 }
@@ -99,8 +100,8 @@ static void settingsResultCallback(
     {
         maxVoltage = MAX_VOLTAGE;
     }
-    ctx.battery_percent = (100 * voltage) / maxVoltage;
-    ESP_LOGI(TAG, "Current battery level %f %%", ctx.battery_percent);
+    ctx->battery_percent = (100 * voltage) / maxVoltage;
+    ESP_LOGI(TAG, "Current battery level %f %%", ctx->battery_percent);
 }
 
 bool readSettings(BLEClient *pClient)
@@ -350,6 +351,7 @@ static void start_discovery_handler(void *handler_args, esp_event_base_t base, i
 {
     ibbq_state_t *state = (ibbq_state_t *)handler_args;
     state->connected = false;
+    state->probe_count = 0;
     //state->pBLEScan->setAdvertisedDeviceCallbacks(scanCallback);
     state->pBLEScan->clearResults();
     state->pBLEScan->start(5, ble_scan_finished, false);
@@ -358,15 +360,16 @@ static void start_discovery_handler(void *handler_args, esp_event_base_t base, i
 
 ibbq_state_t *init_ibbq()
 {
+    ctx = (ibbq_state_t *)malloc(sizeof(ibbq_state_t));
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
     ESP_LOGI(TAG, "Initialising BLE for iBBQ");
     BLEDevice::init("");
 
-    ctx.pBLEScan = BLEDevice::getScan();
-    ctx.pBLEScan->setActiveScan(true);
+    ctx->pBLEScan = BLEDevice::getScan();
+    ctx->pBLEScan->setActiveScan(true);
 
-    ctx.pClient = BLEDevice::createClient();
-    ctx.pClient->setClientCallbacks(clientCallbacks);
+    ctx->pClient = BLEDevice::createClient();
+    ctx->pClient->setClientCallbacks(clientCallbacks);
 
     esp_event_loop_args_t ble_loop_args = {
         .queue_size = 5,
@@ -378,13 +381,14 @@ ibbq_state_t *init_ibbq()
     ESP_ERROR_CHECK(esp_timer_create(&battery_timer_args, &battery_timer));
 
     ESP_ERROR_CHECK(esp_event_loop_create(&ble_loop_args, &ble_loop));
-    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, start_discovery_handler, &ctx));
-    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_DISCOVERED, device_discovered, &ctx));
-    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_CONNECTED, device_connected, &ctx));
-    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_AUTHENTICATED, device_authenticated, &ctx));
-    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_REQUEST_STATE, request_device_state, &ctx));
+    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, start_discovery_handler, ctx));
+    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_DISCOVERED, device_discovered, ctx));
+    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_CONNECTED, device_connected, ctx));
+    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_AUTHENTICATED, device_authenticated, ctx));
+    ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_REQUEST_STATE, request_device_state, ctx));
 
-    ESP_ERROR_CHECK(esp_event_post_to(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, &ctx, sizeof(ctx), portMAX_DELAY));
+    ESP_ERROR_CHECK(esp_event_post_to(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, ctx, sizeof(ibbq_state_t), portMAX_DELAY));
 
-    return &ctx;
+    return ctx;
 }
+#endif

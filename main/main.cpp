@@ -115,9 +115,7 @@ void app_main()
 
     ibbq_state_t *bbq_state = init_ibbq();
     loadSettings(CHANNEL_SETTINGS, bbq_state->probes);
-    static network_context_t nCtx;
-    nCtx.bbq_state = bbq_state;
-    //ibbq_state_t bbq_state = {};
-    //nCtx.bbq_state = &bbq_state;
-    wifi_init_sta(&nCtx);
+    network_context_t *nCtx = (network_context_t *)malloc(sizeof(network_context_t));
+    nCtx->bbq_state = bbq_state;
+    wifi_init_sta(nCtx);
 }
