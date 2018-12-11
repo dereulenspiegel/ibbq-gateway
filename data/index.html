@@ -27,42 +27,6 @@
   	font-style: normal;
 }
 
-.bt-icon
-    {
-      font-family: "fontello";
-      font-style: normal;
-      font-weight: normal;
-      speak: none;
-
-      display: inline-block;
-      text-decoration: inherit;
-      width: 1em;
-      margin-right: .2em;
-      text-align: center;
-      /* opacity: .8; */
-
-      /* For safety - reset parent styles, that can break glyph codes*/
-      font-variant: normal;
-      text-transform: none;
-
-      /* fix buttons height, for twitter bootstrap */
-      line-height: 1em;
-
-      /* Animation center compensation - margins should be symmetric */
-      /* remove if not needed */
-      margin-left: .2em;
-
-      /* You can be more comfortable with increased icons size */
-      /* font-size: 120%; */
-
-      /* Font smoothing. That was taken from TWBS */
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-
-      /* Uncomment for 3D effect */
-      /* text-shadow: 1px 1px 1px rgba(127, 127, 127, 0.3); */
-    }
-
 [class^="icon-"], [class*=" icon-"] {
   /* use !important to prevent issues with browser extensions that change fonts */
   font-family: 'nano' !important;
@@ -163,6 +127,81 @@
   transition-delay: 1s;
   display: inline-block;
 }
+
+.symbol-bluetooth-connected
+    {
+      font-family: "fontello" !important;
+      font-style: normal;
+      font-weight: normal;
+      speak: none;
+
+      display: inline-block;
+      text-decoration: inherit;
+      width: 1em;
+      margin-right: .2em;
+      text-align: center;
+      /* opacity: .8; */
+
+      /* For safety - reset parent styles, that can break glyph codes*/
+      font-variant: normal;
+      text-transform: none;
+
+      /* fix buttons height, for twitter bootstrap */
+      line-height: 1em;
+
+      /* Animation center compensation - margins should be symmetric */
+      /* remove if not needed */
+      margin-left: .2em;
+
+      /* You can be more comfortable with increased icons size */
+      /* font-size: 120%; */
+
+      /* Font smoothing. That was taken from TWBS */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+
+      /* Uncomment for 3D effect */
+      /* text-shadow: 1px 1px 1px rgba(127, 127, 127, 0.3); */
+    }
+
+.symbol-bluetooth-disconnected
+    {
+      font-family: "fontello" !important;
+      font-style: normal;
+      font-weight: normal;
+      speak: none;
+
+      display: inline-block;
+      text-decoration: inherit;
+      width: 1em;
+      margin-right: .2em;
+      text-align: center;
+      /* opacity: .8; */
+
+      /* For safety - reset parent styles, that can break glyph codes*/
+      font-variant: normal;
+      text-transform: none;
+
+      /* fix buttons height, for twitter bootstrap */
+      line-height: 1em;
+
+      /* Animation center compensation - margins should be symmetric */
+      /* remove if not needed */
+      margin-left: .2em;
+
+      /* You can be more comfortable with increased icons size */
+      /* font-size: 120%; */
+
+      /* Font smoothing. That was taken from TWBS */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+
+      /* Uncomment for 3D effect */
+      /* text-shadow: 1px 1px 1px rgba(127, 127, 127, 0.3); */
+    }
+
+.symbol-bluetooth-connected:before { content: '\f294'; }
+.symbol-bluetooth-disconnected:before { content: '\f293'; }
 
 .icon-blinker{animation: blinker 2s linear infinite;}
 @keyframes blinker {  
@@ -1909,7 +1948,7 @@
 			<div id="thermoname">N.C.</div>
 			<div class="battery" onclick="setshowBatteryWlanIcon();">N.C.</div>
 			<div class="wifi" onclick="setshowBatteryWlanIcon();">N.C.</div>
-			<div class="bluetooth" onclick="setshowBatteryWlanIcon();">N.C.</div>
+			<div class="bluetooth" onclick="setshowBatteryWlanIcon();"><span class="bicon-bluetooth-disconnected"></span></div>
 			<div class="notification" style="display:none" onclick="update();"><span class="icon-notification"> </span></div>
 		</div>
 		<div class="clear"></div>
@@ -2353,12 +2392,12 @@
 									<input class="temp_input" id="temp_min" type="text" onkeyup="validateNumber(this,'1');" maxlength="6" required="required" />
 									<label class="control-label" for="input">Temp Min</label><i class="bar"></i>
 								</div>
-								<div class="form-group">
+								<!--<div class="form-group">
 									<select id="sensor">
-										<!-- Placeholder -->
+										
 									</select>
 									<label class="control-label" for="select">Fühler</label><i class="bar"></i>
-								</div>
+								</div> -->
 								<div class="form-group">
 									<select id="color">
 										<option value="#5587A2">Niagara</option>
@@ -2425,7 +2464,7 @@
 								<div class="form-group">
 									<select id="hwversion"></select><label class="control-label" for="select">Hardwareversion</label><i class="bar"></i>
 								</div>
-								<div class="checkbox"><label><input id="fastmode" type="checkbox" /><i class="helper"></i>Schnelllauf</label></div>
+								<!--<div class="checkbox"><label><input id="fastmode" type="checkbox" /><i class="helper"></i>Schnelllauf</label></div>-->
 								<div class="checkbox"><label><input id="searchUpdate" type="checkbox" /><i class="helper"></i>Nach Updates
 										suchen</label></div>
 							</form>
@@ -2714,6 +2753,12 @@
 		<div id="spinner"></div>
 	</div>
 	<script>
+		if ('serviceWorker' in navigator && 'PushManager' in window) {
+			console.log("Yay, service worker are enabled!");
+		}
+	</script>
+
+	<script>
 		// ----------------------------------------------------------------------------------- 
 		var byId = function (id) { return document.getElementById(id); };
 		var byClass = function (id) { return document.getElementsByClassName(id); };
@@ -2922,10 +2967,10 @@
 			showLoader('true');
 			loadJSON('settings', '', '3000', function (response) {
 				jr = JSON.parse(response);
-				clearOption('sensor');
-				for (var i = 0; i < jr.sensors.length; i++) {
+				//clearOption('sensor');
+				/*for (var i = 0; i < jr.sensors.length; i++) {
 					byId('sensor').options[byId('sensor').options.length] = new Option(jr.sensors[i], i);
-				}
+				}*/
 				loadJSON('data', '', '3000', function (response) {
 					jr = JSON.parse(response);
 					byId('channel_settings_save').setAttribute('onclick', 'setChannel(' + channel + ');');
@@ -2934,7 +2979,7 @@
 					byId('temp_max').value = jr.channel[channel].max;
 					byId('temp_min').value = jr.channel[channel].min;
 					byId('color').value = jr.channel[channel].color;
-					byId('sensor').value = jr.channel[channel].typ;
+					//byId('sensor').value = jr.channel[channel].typ;
 					switch (jr.channel[channel].alarm) {
 						case 0:
 							byId('pushalarm').checked = false;
@@ -2966,7 +3011,7 @@
 				jr.channel[channel].min = parseInt(byId('temp_min').value);
 				jr.channel[channel].max = parseInt(byId('temp_max').value);
 				jr.channel[channel].name = byId('channel_name').value;
-				jr.channel[channel].typ = byId('sensor').value;
+				//jr.channel[channel].typ = byId('sensor').value;
 				var push = 0;
 				if (byId('pushalarm').checked == false && byId('hwalarm').checked == false) {
 					push = 0;
@@ -3085,10 +3130,10 @@
 				byId('unit').value = jr.system.unit;
 				//byId('fastmode').checked = jr.system.fastmode;
 				byId('searchUpdate').checked = jr.system.autoupd;
-				clearOption('hwversion');
-				for (var i = 0; i < jr.hardware.length; i++) {
+				//clearOption('hwversion');
+				/*for (var i = 0; i < jr.hardware.length; i++) {
 					byId('hwversion').options[byId('hwversion').options.length] = new Option(jr.hardware[i], jr.hardware[i]);
-				}
+				}*/
 				byId('hwversion').value = jr.system.hwversion;
 				byId('system_config').style.display = "inline";
 				showLoader('false');
@@ -3101,7 +3146,7 @@
 				jr = JSON.parse(response);
 				jr.system.host = byId('hostname').value.replace(/ /g, '_');
 				jr.system.ap = byId('apname').value.replace(/ /g, '_');
-				jr.system.hwversion = byId('hwversion').value;
+				//jr.system.hwversion = byId('hwversion').value;
 				jr.system.language = byId('language').value;
 				jr.system.unit = byId('unit').value;
 				//jr.system.fastmode = byId('fastmode').checked;
@@ -3388,11 +3433,10 @@
 		}
 
 		function getBluetoothIcon(dbm) {
-			data = '';
 			if (iBBQConnected === true) {
-				return '<span class="bt-icon icon-bluetooth-connected"></span>';
+				return '<span class="symbol-bluetooth-connected"></span>';
 			} else {
-				return '<span class="bt-icon icon-bluetooth-disconnected"></span>';
+				return '<span class="symbol-bluetooth-disconnected"></span>';
 			}
 		}
 
