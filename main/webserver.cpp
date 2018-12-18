@@ -46,6 +46,8 @@ static cJSON *serialize_system(ibbq_state_t *bbq_state)
     cJSON_AddStringToObject(system, "host", sys_settings->hostname);
     cJSON_AddBoolToObject(system, "autoupd", false);
 
+    free(sys_settings);
+
     return system;
 }
 
@@ -390,15 +392,9 @@ esp_err_t settings_get_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
 
-    system_settings_t *settings = (system_settings_t *)malloc(sizeof(system_settings_t));
-
-    loadSettings(SYSTEM_SETTINGS, settings);
-
     cJSON *root = cJSON_CreateObject();
     cJSON *system = serialize_system(bbq_state);
     cJSON_AddItemToObject(root, "system", system);
-    cJSON_AddStringToObject(system, "host", settings->hostname);
-    cJSON_AddStringToObject(system, "unit", settings->unit);
 
     cJSON *sensors = cJSON_CreateArray();
     cJSON_AddItemToObject(root, "sensors", sensors);

@@ -14,7 +14,7 @@ extern "C"
         ibbq_state_t *bbq_state;
     } network_context_t;
 
-    void wifi_init_sta(network_context_t *ctx);
+    void wifi_init(network_context_t *ctx);
 #ifdef __cplusplus
 }
 #endif

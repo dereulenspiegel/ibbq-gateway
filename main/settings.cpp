@@ -103,6 +103,13 @@ void saveSettings(SETTINS_ID type, void *settings)
         writeToFile("system", settings, sizeof(system_settings_t));
         break;
     }
+    case WIFI_SETTINGS:
+    {
+        wifi_client_config_t *config = (wifi_client_config_t *)settings;
+        config->version = 1;
+        writeToFile("wifi_client", settings, sizeof(wifi_client_config_t));
+        break;
+    }
     default:
     {
         ESP_LOGE(TAG, "Unknown settings value");
@@ -111,7 +118,7 @@ void saveSettings(SETTINS_ID type, void *settings)
     }
 }
 
-void loadSettings(SETTINS_ID type, void *settings)
+bool loadSettings(SETTINS_ID type, void *settings)
 {
     ESP_LOGI(TAG, "Loading settings: %d", type);
     size_t len = 0;
@@ -129,12 +136,13 @@ void loadSettings(SETTINS_ID type, void *settings)
             memcpy(settings, def_chan_conf, sizeof(probe_data_t) * MAX_PROBE_COUNT);
             ESP_LOGI(TAG, "Returning default channel settings");
             free(def_chan_conf);
-            return;
+            return false;
         }
 
         if (cs.version == 1)
         {
             memcpy(settings, cs.probe_configs, sizeof(cs.probe_configs));
+            return true;
         }
         else
         {
@@ -142,6 +150,7 @@ void loadSettings(SETTINS_ID type, void *settings)
             memcpy(settings, def_chan_conf, sizeof(probe_data_t[MAX_PROBE_COUNT]));
             ESP_LOGE(TAG, "Unknown version for channel settings: %d", cs.version);
             free(def_chan_conf);
+            return false;
         }
         break;
     }
@@ -152,24 +161,41 @@ void loadSettings(SETTINS_ID type, void *settings)
         if (len == 0)
         {
             memcpy(settings, defaultSystemSettings(), sizeof(system_settings_t));
-            return;
+            return false;
         }
 
         system_settings_t *sys_settings = (system_settings_t *)settings;
         if (sys_settings->version == 1)
         {
-            return;
+            return true;
         }
         else
         {
             memcpy(settings, defaultSystemSettings(), sizeof(system_settings_t));
             ESP_LOGE(TAG, "Unknown system settings version: %d", sys_settings->version);
+            return false;
+        }
+        break;
+    }
+    case WIFI_SETTINGS:
+    {
+        len = sizeof(wifi_client_config_t);
+        readFromFile("wifi_client", (uint8_t *)settings, &len);
+        wifi_client_config_t *config = (wifi_client_config_t *)settings;
+        if (len == 0 || config->version != 1)
+        {
+            return false;
+        }
+        else
+        {
+            return true;
         }
         break;
     }
     default:
     {
         ESP_LOGE(TAG, "Unknown settings value");
+        return false;
         break;
     }
     }

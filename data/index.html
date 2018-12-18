@@ -2018,10 +2018,11 @@
 					<li id="menuHome" class="pure-menu-item"><a href="javascript:showIndex()" class="pure-menu-link">Home</a></li>
 					<li id="menuWlan" class="pure-menu-item"><a href="javascript:showWLAN()" class="pure-menu-link">WLAN</a></li>
 					<li id="menuSystem" class="pure-menu-item"><a href="javascript:showSystem()" class="pure-menu-link">System</a></li>
+					<!-- These are disabled for now, until we make them work again
 					<li id="menuPitmaster" class="pure-menu-item"><a href="javascript:showPitmaster()" class="pure-menu-link">Pitmaster</a></li>
 					<li id="menuThingspeak" class="pure-menu-item"><a href="javascript:showThingspeak()" class="pure-menu-link">IoT</a></li>
 					<li id="menuNotification" class="pure-menu-item"><a href="javascript:showPushNotification()" class="pure-menu-link">Push
-							Notification</a></li>
+							Notification</a></li> -->
 					<li id="menuAbout" class="pure-menu-item"><a href="javascript:showAbout()" class="pure-menu-link">Über</a></li>
 				</ul>
 			</div>
@@ -2802,9 +2803,9 @@
 			menuLink.onclick = function (e) { toggleAll(e); };
 			menuHome.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showIndex(); } };
 			menuWlan.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showWLAN(); } };
-			menuThingspeak.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showThingspeak(); } };
-			menuPitmaster.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showPitmaster(); } };
-			menuNotification.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showPushNotification(); } };
+			//menuThingspeak.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showThingspeak(); } };
+			//menuPitmaster.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showPitmaster(); } };
+			//menuNotification.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showPushNotification(); } };
 			menuSystem.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showSystem(); } };
 			menuAbout.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); showAbout(); } };
 			content.onclick = function (e) { if (menu.className.indexOf('active') !== -1) { toggleAll(e); } };

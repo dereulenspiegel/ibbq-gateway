@@ -14,6 +14,7 @@ extern "C"
         CHANNEL_SETTINGS,
         SYSTEM_SETTINGS,
         GLOBAL_SETTINGS,
+        WIFI_SETTINGS,
     };
 
     typedef struct system_settings
@@ -30,6 +31,13 @@ extern "C"
         probe_data_t probe_configs[MAX_PROBE_COUNT];
     } global_settings_t;*/
 
+    typedef struct wifi_client_config
+    {
+        uint8_t version;
+        char ssid[32];
+        char psk[64];
+    } wifi_client_config_t;
+
     typedef struct channel_settings
     {
         uint8_t version;
@@ -37,7 +45,7 @@ extern "C"
     } channel_settings_t;
 
     void saveSettings(SETTINS_ID type, void *settings);
-    void loadSettings(SETTINS_ID type, void *settings);
+    bool loadSettings(SETTINS_ID type, void *settings);
 
 #ifdef __cplusplus
 }
