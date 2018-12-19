@@ -21,7 +21,7 @@ static const char *TAG = "wifi station";
 
 static dns_server_config_t dns_config = {
     .answer_all = false,
-    .hostname = "ibbq.local."};
+    .hostname = "ibbq.gateway."};
 
 static void connect_timeout_timer_callback(void *arg);
 static esp_timer_handle_t connect_timeout_timer;
@@ -104,7 +104,7 @@ void wifi_init_ap(network_context_t *ctx)
     strncpy((char *)wifi_config.ap.ssid, sys_settings->ap_name, sizeof(wifi_config.ap.ssid));
     wifi_config.ap.ssid_len = strlen((char *)wifi_config.ap.ssid);
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     free(sys_settings);
@@ -130,6 +130,7 @@ void wifi_init(network_context_t *ctx)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
     wifi_client_config_t *client_config = (wifi_client_config_t *)malloc(sizeof(wifi_client_config_t));
     if (!loadSettings(WIFI_SETTINGS, client_config))
@@ -156,7 +157,7 @@ void wifi_init(network_context_t *ctx)
         strncpy((char *)connect_timeout_timer_args->name, "wifi_connect_timeout", sizeof("wifi_connect_timeout"));
 
         ESP_ERROR_CHECK(esp_timer_create(connect_timeout_timer_args, &connect_timeout_timer));
-        ESP_ERROR_CHECK(esp_timer_start_once(connect_timeout_timer, 15000000));
+        ESP_ERROR_CHECK(esp_timer_start_once(connect_timeout_timer, 30000000));
     }
     free(client_config);
 

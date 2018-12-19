@@ -5,6 +5,10 @@
 #include "esp_spiffs.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_event_loop.h"
+#include "esp_timer.h"
+#include "freertos/semphr.h"
 #include "mdns.h"
 #include "cJSON.h"
 #include <string.h>
@@ -12,6 +16,9 @@
 #include "settings.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX_SCAN_APS 15
+
+ESP_EVENT_DEFINE_BASE(WIFI_SCAN_EVENT)
 
 static const char *TAG = "webserver";
 
@@ -20,12 +27,21 @@ static const char *TAG = "webserver";
 #define EXAMPLE_MDNS_INSTANCE "ibbq"
 //static const char c_config_hostname[] = "ibbq";
 
+esp_event_loop_handle_t wifi_scan_loop;
+
+TaskHandle_t scan_task_handle = NULL;
+static SemaphoreHandle_t wifi_scan_semaphore = NULL;
+//StaticSemaphore_t wifi_scan_semaphore_buffer;
+
+typedef struct wifi_scan_data
+{
+    uint16_t scanned_aps_count;
+    wifi_ap_record_t *scanned_aps;
+} wifi_scan_data_t;
+
 static cJSON *serialize_system(ibbq_state_t *bbq_state)
 {
     cJSON *system = cJSON_CreateObject();
-
-    wifi_ap_record_t ap_info;
-    ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&ap_info));
 
     system_settings_t *sys_settings = (system_settings_t *)malloc(sizeof(system_settings_t));
     loadSettings(SYSTEM_SETTINGS, sys_settings);
@@ -38,7 +54,18 @@ static cJSON *serialize_system(ibbq_state_t *bbq_state)
     cJSON_AddBoolToObject(system, "ibbq_connected", bbq_state->connected);
     cJSON_AddNumberToObject(system, "ibbq_rssi", bbq_state->rssi);
     cJSON_AddNumberToObject(system, "soc", bbq_state->battery_percent);
-    cJSON_AddNumberToObject(system, "rssi", ap_info.rssi);
+
+    wifi_ap_record_t ap_info;
+    esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
+    if (err == ESP_OK)
+    {
+        cJSON_AddNumberToObject(system, "rssi", ap_info.rssi);
+    }
+    else if (err != ESP_ERR_WIFI_NOT_CONNECT)
+    {
+        ESP_LOGW(TAG, "Failed to retrieve WiFi info due to unknown error: %s", esp_err_to_name(err));
+    }
+
     cJSON_AddStringToObject(system, "unit", sys_settings->unit);
     cJSON_AddStringToObject(system, "ap", sys_settings->ap_name);
     cJSON_AddStringToObject(system, "language", sys_settings->lang);
@@ -166,7 +193,6 @@ esp_err_t data_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, jsonString, strlen(jsonString));
     cJSON_Delete(root);
-    ESP_LOGI(TAG, "Returning JSON for probe data: %s", jsonString);
     free(jsonString);
     ESP_LOGI(TAG, "Free heap after request: %d", esp_get_free_heap_size());
     return ESP_OK;
@@ -420,6 +446,110 @@ httpd_uri_t settings_get_route = {
     .handler = settings_get_handler,
     .user_ctx = NULL};
 
+void scan_task(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
+{
+    ESP_LOGI(TAG, "Scanning for neighbouring access points");
+    wifi_scan_data_t *ctx = (wifi_scan_data_t *)handler_args;
+    if (ctx->scanned_aps_count > 0)
+    {
+        ctx->scanned_aps_count = 0;
+    }
+    wifi_scan_config_t config = {};
+    config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    esp_err_t err = esp_wifi_scan_start(&config, true);
+    if (err == ESP_ERR_WIFI_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "WiFi timeout during scanning");
+    }
+    else if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Unexpected error during WiFi scanning: %s", esp_err_to_name(err));
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ctx->scanned_aps_count));
+    ESP_LOGI(TAG, "Found %d access points", ctx->scanned_aps_count);
+    ctx->scanned_aps_count = MIN(ctx->scanned_aps_count, MAX_SCAN_APS);
+    if (ctx->scanned_aps_count > 0)
+    {
+        ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ctx->scanned_aps_count, ctx->scanned_aps));
+    }
+    xSemaphoreGive(wifi_scan_semaphore);
+}
+
+void initiate_wifi_scan()
+{
+    if (xSemaphoreTake(wifi_scan_semaphore, (TickType_t)10))
+    {
+        xSemaphoreGive(wifi_scan_semaphore);
+        ESP_ERROR_CHECK(esp_event_post_to(wifi_scan_loop, WIFI_SCAN_EVENT, WIFI_SCAN_REQUESTED, NULL, 0, portMAX_DELAY));
+    }
+    else
+    {
+        ESP_LOGI(TAG, "WiFi scan already in process");
+    }
+}
+
+esp_err_t networkscan_handler(httpd_req_t *req)
+{
+    initiate_wifi_scan();
+
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+httpd_uri_t networkscan_route = {
+    .uri = "/networkscan",
+    .method = HTTP_GET,
+    .handler = networkscan_handler,
+    .user_ctx = NULL};
+
+esp_err_t networklist_handler(httpd_req_t *req)
+{
+    wifi_scan_data_t *ctx = (wifi_scan_data_t *)req->user_ctx;
+    wifi_ap_record_t *records = NULL;
+    uint16_t ap_count = 0;
+    bool semaphore_taken = xSemaphoreTake(wifi_scan_semaphore, (TickType_t)5);
+    if (semaphore_taken)
+    {
+        ESP_LOGI(TAG, "WiFi scan seems to be finished, accessing data");
+        records = ctx->scanned_aps;
+        ap_count = ctx->scanned_aps_count;
+    }
+    ESP_LOGI(TAG, "Serializing %d access point records", ap_count);
+    cJSON *root = cJSON_CreateObject();
+    cJSON *scan = cJSON_CreateArray();
+    cJSON_AddItemToObject(root, "Scan", scan);
+
+    for (int i = 0; i < ap_count; i++)
+    {
+        cJSON *ap = cJSON_CreateObject();
+        cJSON_AddStringToObject(ap, "SSID", (const char *)records[i].ssid);
+        cJSON_AddNumberToObject(ap, "RSSI", records[i].rssi);
+        cJSON_AddNumberToObject(ap, "Enc", records[i].authmode);
+        // TODO add encryption info
+        cJSON_AddItemToArray(scan, ap);
+    }
+    char *jsonString = NULL;
+    jsonString = cJSON_Print(root);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, jsonString, strlen(jsonString));
+
+    cJSON_Delete(root);
+    if (semaphore_taken)
+    {
+        ESP_LOGI(TAG, "Releasing semaphore for WiFi scan after listing available WiFis");
+        xSemaphoreGive(wifi_scan_semaphore);
+    }
+    return ESP_OK;
+}
+
+httpd_uri_t networklist_route = {
+    .uri = "/networklist",
+    .method = HTTP_GET,
+    .handler = networklist_handler,
+    .user_ctx = NULL};
+
 esp_err_t setchannels_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
@@ -522,10 +652,26 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
     config.max_uri_handlers = 12;
     config.stack_size = 8192;
 
+    wifi_scan_semaphore = xSemaphoreCreateBinary();
+    xSemaphoreGive(wifi_scan_semaphore);
+
+    esp_event_loop_args_t wifi_scan_loop_args = {
+        .queue_size = 5,
+        .task_name = "wifi_scan_loop_task", // task will be created
+        .task_priority = uxTaskPriorityGet(NULL),
+        .task_stack_size = 2048,
+        .task_core_id = tskNO_AFFINITY};
+
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     esp_err_t ret = httpd_start(&server, &config);
     if (ret == ESP_OK)
     {
+        wifi_scan_data_t *scanned_wifi_data = (wifi_scan_data_t *)malloc(sizeof(wifi_scan_data_t));
+        scanned_wifi_data->scanned_aps = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * MAX_SCAN_APS);
+        ESP_ERROR_CHECK(esp_event_loop_create(&wifi_scan_loop_args, &wifi_scan_loop));
+        ESP_ERROR_CHECK(esp_event_handler_register_with(wifi_scan_loop, WIFI_SCAN_EVENT, WIFI_SCAN_REQUESTED, scan_task, scanned_wifi_data));
+        initiate_wifi_scan();
+
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
         httpd_register_uri_handler(server, &index_route);
@@ -542,6 +688,10 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
         httpd_register_uri_handler(server, &set_system_route);
         get_system_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &get_system_route);
+        networklist_route.user_ctx = (void *)scanned_wifi_data;
+        httpd_register_uri_handler(server, &networklist_route);
+        networkscan_route.user_ctx = (void *)scanned_wifi_data;
+        httpd_register_uri_handler(server, &networkscan_route);
         initialise_mdns();
         return server;
     }
