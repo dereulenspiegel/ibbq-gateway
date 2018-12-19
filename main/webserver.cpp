@@ -551,6 +551,66 @@ httpd_uri_t networklist_route = {
     .handler = networklist_handler,
     .user_ctx = NULL};
 
+esp_err_t setnetwork_handler(httpd_req_t *req)
+{
+    char buf[1024];
+    int ret, remaining = req->content_len;
+
+    if (remaining > sizeof(buf))
+    {
+        ESP_LOGW(TAG, "Received request with %d bytes, which is larger than buf with %d bytes", remaining, sizeof(buf));
+        httpd_resp_set_status(req, "400");
+        return ESP_OK;
+    }
+
+    if ((ret = httpd_req_recv(req, buf,
+                              MIN(remaining, sizeof(buf)))) <= 0)
+    {
+        if (ret != HTTPD_SOCK_ERR_TIMEOUT)
+        {
+            return ESP_FAIL;
+        }
+    }
+
+    cJSON *root = cJSON_Parse(buf);
+    if (root == NULL)
+    {
+        httpd_resp_set_status(req, "400");
+        httpd_resp_send_chunk(req, NULL, 0);
+        return ESP_OK;
+    }
+
+    wifi_client_config_t *wifi_config = (wifi_client_config_t *)malloc(sizeof(wifi_client_config_t));
+    loadSettings(WIFI_SETTINGS, wifi_config);
+
+    cJSON *ssid = cJSON_GetObjectItemCaseSensitive(root, "ssid");
+    if (ssid != NULL && cJSON_IsString(ssid))
+    {
+        strncpy(wifi_config->ssid, ssid->valuestring, 32);
+        wifi_config->ssid[31] = '\0';
+    }
+    cJSON *password = cJSON_GetObjectItemCaseSensitive(root, "password");
+    if (password != NULL && cJSON_IsString(password))
+    {
+        strncpy(wifi_config->psk, password->valuestring, 64);
+        wifi_config->ssid[63] = '\0';
+    }
+
+    saveSettings(WIFI_SETTINGS, wifi_config);
+    // TODO apply these settings
+    httpd_resp_send_chunk(req, NULL, 0);
+    cJSON_Delete(root);
+    free(wifi_config);
+    esp_restart();
+    return ESP_OK;
+}
+
+httpd_uri_t setnetwork_route{
+    .uri = "/setnetwork",
+    .method = HTTP_POST,
+    .handler = setnetwork_handler,
+    .user_ctx = NULL};
+
 esp_err_t setchannels_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
@@ -694,6 +754,7 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
         httpd_register_uri_handler(server, &networklist_route);
         networkscan_route.user_ctx = (void *)scanned_wifi_data;
         httpd_register_uri_handler(server, &networkscan_route);
+        httpd_register_uri_handler(server, &setnetwork_route);
         initialise_mdns();
         return server;
     }

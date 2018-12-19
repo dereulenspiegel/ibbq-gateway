@@ -9,7 +9,7 @@
 #include "esp_timer.h"
 
 #include "webserver.h"
-#include "wifi_creds.h"
+//#include "wifi_creds.h"
 #include "settings.h"
 #include "dns_server.h"
 
@@ -148,7 +148,7 @@ void wifi_init(network_context_t *ctx)
         ESP_ERROR_CHECK(esp_wifi_start());
 
         ESP_LOGI(TAG, "wifi_init_sta finished.");
-        ESP_LOGI(TAG, "connect to ap SSID:%s", WIFI_SSID);
+        ESP_LOGI(TAG, "connect to ap SSID:%s", client_config->ssid);
 
         esp_timer_create_args_t *connect_timeout_timer_args = (esp_timer_create_args_t *)malloc(sizeof(esp_timer_create_args_t));
         connect_timeout_timer_args->callback = &connect_timeout_timer_callback;
@@ -156,14 +156,10 @@ void wifi_init(network_context_t *ctx)
         connect_timeout_timer_args->dispatch_method = ESP_TIMER_TASK;
         strncpy((char *)connect_timeout_timer_args->name, "wifi_connect_timeout", sizeof("wifi_connect_timeout"));
 
+        ESP_LOGI(TAG, "Creating WiFi connect timeout timer");
         ESP_ERROR_CHECK(esp_timer_create(connect_timeout_timer_args, &connect_timeout_timer));
+        ESP_LOGI(TAG, "Starting WiFi connect timeout timer");
         ESP_ERROR_CHECK(esp_timer_start_once(connect_timeout_timer, 30000000));
     }
     free(client_config);
-
-    /*wifi_config_t wifi_config = {
-        .sta = {
-            {.ssid = WIFI_SSID},
-            {.password = WIFI_PSK}},
-    };*/
 }
