@@ -515,6 +515,7 @@ esp_err_t networklist_handler(httpd_req_t *req)
         records = ctx->scanned_aps;
         ap_count = ctx->scanned_aps_count;
     }
+    ap_count = MIN(ap_count, MAX_SCAN_APS);
     ESP_LOGI(TAG, "Serializing %d access point records", ap_count);
     cJSON *root = cJSON_CreateObject();
     cJSON *scan = cJSON_CreateArray();
@@ -668,6 +669,7 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
     {
         wifi_scan_data_t *scanned_wifi_data = (wifi_scan_data_t *)malloc(sizeof(wifi_scan_data_t));
         scanned_wifi_data->scanned_aps = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * MAX_SCAN_APS);
+        scanned_wifi_data->scanned_aps_count = 0;
         ESP_ERROR_CHECK(esp_event_loop_create(&wifi_scan_loop_args, &wifi_scan_loop));
         ESP_ERROR_CHECK(esp_event_handler_register_with(wifi_scan_loop, WIFI_SCAN_EVENT, WIFI_SCAN_REQUESTED, scan_task, scanned_wifi_data));
         initiate_wifi_scan();
