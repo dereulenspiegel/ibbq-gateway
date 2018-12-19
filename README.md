@@ -1,4 +1,4 @@
-#iBBQ-Gateway
+# iBBQ-Gateway
 
 This small projects is tool to extend the range and functionality of simple Bluetooth based BBQ thermometers. It is based
 around the ESP32 and uses the Bluetooth connectivity of the ESP32 to connect to iBBQ like BBQ thermometers and read their
