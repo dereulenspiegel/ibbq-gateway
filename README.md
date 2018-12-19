@@ -34,10 +34,22 @@ After flashing the device you should find a new WiFi with the name `ibbq-ap`. Co
 password `ibbq-wifi`. In your browser enter `http://ibbq.gateway` and access the web UI. If an active iBBQ was close
 enough it should connect automatically.
 
+## Features
+
+* Automatically connects to iBBQ Bluetooth BBQ thermometers (tested with IBT-2X)
+* Adapts amount of displayed channels on web UI to amount of actual channels of connected thermometer
+* Announces `ibbq-server` mDNS HTTP service
+* Should work with most ESP32 boards available
+* Should work with iBBQ based Bluetooth BBQ thermometers with up to 8 channels
+* Channel configuration. Give each channel a name, color and min/max temperatur
+* Set custom hostname
+* Set custom access point name
+* If configured WiFi is not reachable, fallback to access point mode after 30 seconds
+
 ## ToDos
 
-* Generate WiFi password and use OLED to display it there (increases security)
-* Implement notifications with the help of Progressive Web App technology
-* Implement 'local' notifications
-* Add MQTT connectivity
-* Add Pitmaster functionality
+* [ ] Generate WiFi password and use OLED to display it there (increases security)
+* [ ] Implement notifications with the help of Progressive Web App technology
+* [ ] Implement 'local' notifications
+* [ ] Add MQTT connectivity
+* [ ] Add Pitmaster functionality
