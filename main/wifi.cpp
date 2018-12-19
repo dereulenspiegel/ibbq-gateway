@@ -25,6 +25,7 @@ static dns_server_config_t dns_config = {
 
 static void connect_timeout_timer_callback(void *arg);
 static esp_timer_handle_t connect_timeout_timer;
+esp_timer_create_args_t connect_timeout_timer_args;
 
 //static EventGroupHandle_t s_wifi_event_group;
 
@@ -36,6 +37,8 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
     switch (event->event_id)
     {
     case SYSTEM_EVENT_STA_START:
+        ESP_LOGI(TAG, "Setting hostname to %s", nCtx->sys_settings->hostname);
+        ESP_ERROR_CHECK(tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, nCtx->sys_settings->hostname));
         esp_wifi_connect();
         break;
     case SYSTEM_EVENT_STA_CONNECTED:
@@ -150,14 +153,14 @@ void wifi_init(network_context_t *ctx)
         ESP_LOGI(TAG, "wifi_init_sta finished.");
         ESP_LOGI(TAG, "connect to ap SSID:%s", client_config->ssid);
 
-        esp_timer_create_args_t *connect_timeout_timer_args = (esp_timer_create_args_t *)malloc(sizeof(esp_timer_create_args_t));
-        connect_timeout_timer_args->callback = &connect_timeout_timer_callback;
-        connect_timeout_timer_args->arg = (void *)ctx;
-        connect_timeout_timer_args->dispatch_method = ESP_TIMER_TASK;
-        strncpy((char *)connect_timeout_timer_args->name, "wifi_connect_timeout", sizeof("wifi_connect_timeout"));
+        connect_timeout_timer_args = {
+            .callback = &connect_timeout_timer_callback,
+            .arg = (void *)ctx,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "wifi_connect_timeout"};
 
         ESP_LOGI(TAG, "Creating WiFi connect timeout timer");
-        ESP_ERROR_CHECK(esp_timer_create(connect_timeout_timer_args, &connect_timeout_timer));
+        ESP_ERROR_CHECK(esp_timer_create(&connect_timeout_timer_args, &connect_timeout_timer));
         ESP_LOGI(TAG, "Starting WiFi connect timeout timer");
         ESP_ERROR_CHECK(esp_timer_start_once(connect_timeout_timer, 30000000));
     }
