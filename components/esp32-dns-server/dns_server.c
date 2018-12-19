@@ -108,13 +108,11 @@ void receive_thread(void *pvParameters)
             data[length] = '\0';
 
             inet_ntop(AF_INET, &(client.sin_addr), ipAddress, INET_ADDRSTRLEN);
-            ESP_LOGI(TAG, "Replying to DNS request (len=%d) from %s", length, ipAddress);
 
             uint16_t questionCount = bigEndianInt(&data[4]); //And implicitly data[5]
             uint16_t answerCount = bigEndianInt(&data[6]);
             uint16_t nsCount = bigEndianInt(&data[8]);
             uint16_t arCount = bigEndianInt(&data[10]);
-            ESP_LOGI(TAG, "Received %d questions", questionCount);
 
             // Prepare our response
             // Copy ID (16 bits)
