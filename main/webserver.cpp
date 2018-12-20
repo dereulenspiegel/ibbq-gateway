@@ -36,8 +36,10 @@ static SemaphoreHandle_t wifi_scan_semaphore = NULL;
 typedef struct wifi_scan_data
 {
     uint16_t scanned_aps_count;
-    wifi_ap_record_t *scanned_aps;
+    wifi_ap_record_t scanned_aps[MAX_SCAN_APS];
 } wifi_scan_data_t;
+
+static wifi_scan_data_t scanned_wifi_data = {};
 
 static cJSON *serialize_system(ibbq_state_t *bbq_state)
 {
@@ -115,7 +117,7 @@ static void initialise_mdns(void)
     free(sys_settings);
 }
 
-esp_err_t file_handler(httpd_req_t *req)
+static esp_err_t file_handler(httpd_req_t *req)
 {
     const char *fileName = (const char *)req->user_ctx;
     FILE *f = fopen(fileName, "r");
@@ -144,25 +146,25 @@ esp_err_t file_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t index_route = {
+static httpd_uri_t index_route = {
     .uri = "/",
     .method = HTTP_GET,
     .handler = file_handler,
     .user_ctx = (char *)INDEX_FILE};
 
-httpd_uri_t font_route = {
+static httpd_uri_t font_route = {
     .uri = "/nano.ttf",
     .method = HTTP_GET,
     .handler = file_handler,
     .user_ctx = (char *)"/spiffs/nano.ttf"};
 
-httpd_uri_t fontello_route = {
+static httpd_uri_t fontello_route = {
     .uri = "/fontello.ttf",
     .method = HTTP_GET,
     .handler = file_handler,
     .user_ctx = (char *)"/spiffs/fontello.ttf"};
 
-esp_err_t data_handler(httpd_req_t *req)
+static esp_err_t data_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
 
@@ -198,13 +200,13 @@ esp_err_t data_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t data_route = {
+static httpd_uri_t data_route = {
     .uri = "/data",
     .method = HTTP_GET,
     .handler = data_handler,
     .user_ctx = NULL};
 
-esp_err_t data_set_handler(httpd_req_t *req)
+static esp_err_t data_set_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
     char buf[2048];
@@ -291,13 +293,13 @@ esp_err_t data_set_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t data_set_route = {
+static httpd_uri_t data_set_route = {
     .uri = "/data",
     .method = HTTP_POST,
     .handler = data_set_handler,
     .user_ctx = NULL};
 
-esp_err_t set_system_handler(httpd_req_t *req)
+static esp_err_t set_system_handler(httpd_req_t *req)
 {
     system_settings *sys_settings = (system_settings_t *)malloc(sizeof(system_settings_t));
     loadSettings(SYSTEM_SETTINGS, sys_settings);
@@ -366,13 +368,13 @@ esp_err_t set_system_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t set_system_route = {
+static httpd_uri_t set_system_route = {
     .uri = "/setsystem",
     .method = HTTP_POST,
     .handler = set_system_handler,
     .user_ctx = NULL};
 
-esp_err_t get_system_handler(httpd_req_t *req)
+static esp_err_t get_system_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
 
@@ -388,7 +390,7 @@ esp_err_t get_system_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t get_system_route = {
+static httpd_uri_t get_system_route = {
 
     .uri = "/setsystem",
     .method = HTTP_GET,
@@ -414,7 +416,7 @@ httpd_uri_t get_system_route = {
     ]
 }
 */
-esp_err_t settings_get_handler(httpd_req_t *req)
+static esp_err_t settings_get_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
 
@@ -440,7 +442,7 @@ esp_err_t settings_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t settings_get_route = {
+static httpd_uri_t settings_get_route = {
     .uri = "/settings",
     .method = HTTP_GET,
     .handler = settings_get_handler,
@@ -489,7 +491,7 @@ void initiate_wifi_scan()
     }
 }
 
-esp_err_t networkscan_handler(httpd_req_t *req)
+static esp_err_t networkscan_handler(httpd_req_t *req)
 {
     initiate_wifi_scan();
 
@@ -497,13 +499,13 @@ esp_err_t networkscan_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t networkscan_route = {
+static httpd_uri_t networkscan_route = {
     .uri = "/networkscan",
     .method = HTTP_GET,
     .handler = networkscan_handler,
     .user_ctx = NULL};
 
-esp_err_t networklist_handler(httpd_req_t *req)
+static esp_err_t networklist_handler(httpd_req_t *req)
 {
     wifi_scan_data_t *ctx = (wifi_scan_data_t *)req->user_ctx;
     wifi_ap_record_t *records = NULL;
@@ -545,13 +547,13 @@ esp_err_t networklist_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t networklist_route = {
+static httpd_uri_t networklist_route = {
     .uri = "/networklist",
     .method = HTTP_GET,
     .handler = networklist_handler,
     .user_ctx = NULL};
 
-esp_err_t setnetwork_handler(httpd_req_t *req)
+static esp_err_t setnetwork_handler(httpd_req_t *req)
 {
     char buf[1024];
     int ret, remaining = req->content_len;
@@ -605,13 +607,13 @@ esp_err_t setnetwork_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t setnetwork_route{
+static httpd_uri_t setnetwork_route{
     .uri = "/setnetwork",
     .method = HTTP_POST,
     .handler = setnetwork_handler,
     .user_ctx = NULL};
 
-esp_err_t setchannels_handler(httpd_req_t *req)
+static esp_err_t setchannels_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
 
@@ -700,7 +702,7 @@ esp_err_t setchannels_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-httpd_uri_t setchannels_route = {
+static httpd_uri_t setchannels_route = {
     .uri = "/setchannels",
     .method = HTTP_POST,
     .handler = setchannels_handler,
@@ -709,7 +711,7 @@ httpd_uri_t setchannels_route = {
 httpd_handle_t init_webserver(ibbq_state_t *state)
 {
     static httpd_handle_t server = NULL;
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    static httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 12;
     config.stack_size = 8192;
 
@@ -727,11 +729,9 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
     esp_err_t ret = httpd_start(&server, &config);
     if (ret == ESP_OK)
     {
-        wifi_scan_data_t *scanned_wifi_data = (wifi_scan_data_t *)malloc(sizeof(wifi_scan_data_t));
-        scanned_wifi_data->scanned_aps = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * MAX_SCAN_APS);
-        scanned_wifi_data->scanned_aps_count = 0;
+        scanned_wifi_data.scanned_aps_count = 0;
         ESP_ERROR_CHECK(esp_event_loop_create(&wifi_scan_loop_args, &wifi_scan_loop));
-        ESP_ERROR_CHECK(esp_event_handler_register_with(wifi_scan_loop, WIFI_SCAN_EVENT, WIFI_SCAN_REQUESTED, scan_task, scanned_wifi_data));
+        ESP_ERROR_CHECK(esp_event_handler_register_with(wifi_scan_loop, WIFI_SCAN_EVENT, WIFI_SCAN_REQUESTED, scan_task, &scanned_wifi_data));
         initiate_wifi_scan();
 
         // Set URI handlers
@@ -750,9 +750,9 @@ httpd_handle_t init_webserver(ibbq_state_t *state)
         httpd_register_uri_handler(server, &set_system_route);
         get_system_route.user_ctx = (void *)state;
         httpd_register_uri_handler(server, &get_system_route);
-        networklist_route.user_ctx = (void *)scanned_wifi_data;
+        networklist_route.user_ctx = (void *)&scanned_wifi_data;
         httpd_register_uri_handler(server, &networklist_route);
-        networkscan_route.user_ctx = (void *)scanned_wifi_data;
+        networkscan_route.user_ctx = (void *)&scanned_wifi_data;
         httpd_register_uri_handler(server, &networkscan_route);
         httpd_register_uri_handler(server, &setnetwork_route);
         initialise_mdns();

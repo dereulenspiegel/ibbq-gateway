@@ -18,6 +18,8 @@
 
 static const char *TAG = "main";
 
+static network_context_t nCtx = {};
+
 extern "C"
 {
     void app_main();
@@ -118,8 +120,8 @@ void app_main()
 
     system_settings_t *sys_settings = (system_settings_t *)malloc(sizeof(system_settings_t));
     loadSettings(SYSTEM_SETTINGS, sys_settings);
-    network_context_t *nCtx = (network_context_t *)malloc(sizeof(network_context_t));
-    nCtx->bbq_state = bbq_state;
-    nCtx->sys_settings = sys_settings;
-    wifi_init(nCtx);
+
+    nCtx.bbq_state = bbq_state;
+    nCtx.sys_settings = sys_settings;
+    wifi_init(&nCtx);
 }
