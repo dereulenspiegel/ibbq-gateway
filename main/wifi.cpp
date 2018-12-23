@@ -11,6 +11,7 @@
 #include "webserver.h"
 #include "settings.h"
 #include "dns_server.h"
+#include "ibbq.h"
 
 #define CONFIG_ESP_MAXIMUM_RETRY 3
 #define MAX_STA_CONN 5
@@ -34,15 +35,24 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
     switch (event->event_id)
     {
     case SYSTEM_EVENT_STA_START:
+    {
         ESP_LOGI(TAG, "Setting hostname to %s", nCtx->sys_settings->hostname);
         ESP_ERROR_CHECK(tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, nCtx->sys_settings->hostname));
         esp_wifi_connect();
         break;
+    }
     case SYSTEM_EVENT_STA_CONNECTED:
+    {
         ESP_LOGI(TAG, "Connected to AP");
         //tcpip_adapter_create_ip6_linklocal(TCPIP_ADAPTER_IF_STA);
+        ESP_LOGI(TAG, "Starting iBBQ connection");
+        ibbq_state_t *bbq_state = init_ibbq();
+        loadSettings(CHANNEL_SETTINGS, bbq_state->probes);
+        nCtx->bbq_state = bbq_state;
         break;
+    }
     case SYSTEM_EVENT_STA_GOT_IP:
+    {
         ESP_LOGI(TAG, "Got IPv4: %s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         s_retry_num = 0;
         if (nCtx->webserver)
@@ -53,11 +63,14 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
         }
         nCtx->webserver = init_webserver(nCtx->bbq_state);
         break;
+    }
     case SYSTEM_EVENT_AP_STA_GOT_IP6:
+    {
         //ip6_addr_t ip_info;
         //ESP_ERROR_CHECK(tcpip_adapter_get_ip6_linklocal(TCPIP_ADAPTER_IF_STA, &ip_info));
         //ESP_LOGI(TAG, "IPv6 address received: %s", IPV62STR(ip_info));
         break;
+    }
     case SYSTEM_EVENT_STA_DISCONNECTED:
     {
         ESP_LOGW(TAG, "Disconnected from WiFi");

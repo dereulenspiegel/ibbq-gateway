@@ -16,8 +16,6 @@
 #include "ibbq.h"
 #include "settings.h"
 
-// ESP-IDF Commit e224b8a43ae0f53d4da3767c90a138392f66f226
-
 static const char *TAG = "main";
 
 static network_context_t nCtx = {};
@@ -117,13 +115,9 @@ void app_main()
         ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
     }
 
-    ibbq_state_t *bbq_state = init_ibbq();
-    loadSettings(CHANNEL_SETTINGS, bbq_state->probes);
-
     system_settings_t *sys_settings = (system_settings_t *)malloc(sizeof(system_settings_t));
     loadSettings(SYSTEM_SETTINGS, sys_settings);
 
-    nCtx.bbq_state = bbq_state;
     nCtx.sys_settings = sys_settings;
     wifi_init(&nCtx);
 }
