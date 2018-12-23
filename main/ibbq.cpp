@@ -366,12 +366,14 @@ ibbq_state_t *init_ibbq()
 
     ctx.pBLEScan = BLEDevice::getScan();
     ctx.pBLEScan->setActiveScan(true);
+    ctx.pBLEScan->setInterval(0x90);
+    ctx.pBLEScan->setWindow(0x10);
 
     ctx.pClient = BLEDevice::createClient();
     ctx.pClient->setClientCallbacks(clientCallbacks);
 
     esp_event_loop_args_t ble_loop_args = {
-        .queue_size = 5,
+        .queue_size = 2,
         .task_name = "ble_task", // task will be created
         .task_priority = uxTaskPriorityGet(NULL),
         .task_stack_size = 4096,

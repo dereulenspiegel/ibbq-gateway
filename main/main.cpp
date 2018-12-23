@@ -16,6 +16,8 @@
 #include "ibbq.h"
 #include "settings.h"
 
+// ESP-IDF Commit e224b8a43ae0f53d4da3767c90a138392f66f226
+
 static const char *TAG = "main";
 
 static network_context_t nCtx = {};

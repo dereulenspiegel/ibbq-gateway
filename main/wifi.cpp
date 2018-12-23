@@ -9,12 +9,11 @@
 #include "esp_timer.h"
 
 #include "webserver.h"
-//#include "wifi_creds.h"
 #include "settings.h"
 #include "dns_server.h"
 
-#define CONFIG_ESP_MAXIMUM_RETRY 50
-#define MAX_STA_CONN 10
+#define CONFIG_ESP_MAXIMUM_RETRY 3
+#define MAX_STA_CONN 5
 #define DEFAULT_WIFI_PASS "ibbq-wifi"
 
 static const char *TAG = "wifi station";
@@ -23,9 +22,7 @@ static dns_server_config_t dns_config = {
     .answer_all = false,
     .hostname = "ibbq.gateway."};
 
-static void connect_timeout_timer_callback(void *arg);
-static esp_timer_handle_t connect_timeout_timer;
-static esp_timer_create_args_t connect_timeout_timer_args;
+void wifi_init_ap(network_context_t *ctx);
 
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -48,8 +45,13 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
     case SYSTEM_EVENT_STA_GOT_IP:
         ESP_LOGI(TAG, "Got IPv4: %s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         s_retry_num = 0;
+        if (nCtx->webserver)
+        {
+            ESP_LOGD(TAG, "Stopping webserver");
+            stop_webserver(nCtx->webserver);
+            nCtx->webserver = NULL;
+        }
         nCtx->webserver = init_webserver(nCtx->bbq_state);
-        esp_timer_stop(connect_timeout_timer);
         break;
     case SYSTEM_EVENT_AP_STA_GOT_IP6:
         //ip6_addr_t ip_info;
@@ -59,20 +61,48 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
     case SYSTEM_EVENT_STA_DISCONNECTED:
     {
         ESP_LOGW(TAG, "Disconnected from WiFi");
-        if (nCtx->webserver)
+
+        if (s_retry_num < CONFIG_ESP_MAXIMUM_RETRY)
         {
-            ESP_LOGD(TAG, "Stopping webserver");
+            ESP_LOGI(TAG, "Retry to connect to the AP. Try %d of %d", (s_retry_num + 1), CONFIG_ESP_MAXIMUM_RETRY);
+            esp_wifi_connect();
+            s_retry_num++;
+        }
+        if (s_retry_num == CONFIG_ESP_MAXIMUM_RETRY)
+        {
+            s_retry_num++;
+            ESP_LOGW(TAG, "Seems we failed to properly connect to the WiFi");
+            ESP_ERROR_CHECK(esp_wifi_stop());
+            wifi_init_ap(nCtx);
+        }
+
+        break;
+    }
+    case SYSTEM_EVENT_AP_START:
+    {
+        ESP_LOGI(TAG, "AP started");
+        init_dns_server(&dns_config);
+        if (nCtx->webserver != NULL)
+        {
             stop_webserver(nCtx->webserver);
             nCtx->webserver = NULL;
         }
-
-        ESP_LOGI(TAG, "Retrying connection");
-        esp_wifi_connect();
-        //xEventGroupClearBits(s_wifi_event_group, CONFIG_ESP_MAXIMUM_RETRY);
-        s_retry_num++;
-        ESP_LOGD(TAG, "retry to connect to the AP");
+        nCtx->webserver = init_webserver(nCtx->bbq_state);
+        ESP_LOGI(TAG, "Waiting for WiFi clients to connect");
         break;
     }
+    case SYSTEM_EVENT_AP_STOP:
+    {
+        ESP_LOGI(TAG, "AP stopped, shutting down webserver and DNS server");
+        if (nCtx->webserver != NULL)
+        {
+            stop_webserver(nCtx->webserver);
+            nCtx->webserver = NULL;
+        }
+        // TODO stop DNS server
+        break;
+    }
+
     case SYSTEM_EVENT_AP_STACONNECTED:
     {
         ESP_LOGI(TAG, "station:" MACSTR " join, AID=%d",
@@ -101,27 +131,18 @@ void wifi_init_ap(network_context_t *ctx)
     loadSettings(SYSTEM_SETTINGS, sys_settings);
 
     wifi_config_t wifi_config = {};
-    memcpy(wifi_config.ap.password, DEFAULT_WIFI_PASS, 10);
+    memcpy(wifi_config.ap.password, DEFAULT_WIFI_PASS, 9);
     wifi_config.ap.max_connection = MAX_STA_CONN;
     wifi_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
     strncpy((char *)wifi_config.ap.ssid, sys_settings->ap_name, sizeof(wifi_config.ap.ssid));
-    wifi_config.ap.ssid_len = strlen((char *)wifi_config.ap.ssid);
+    //wifi_config.ap.ssid_len = strlen((char *)wifi_config.ap.ssid);
+    ESP_LOGI(TAG, "Starting AP with SSID %s", wifi_config.ap.ssid);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    //ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     free(sys_settings);
-    init_dns_server(&dns_config);
-    ctx->webserver = init_webserver(ctx->bbq_state);
-}
-
-static void connect_timeout_timer_callback(void *arg)
-{
-    ESP_LOGW(TAG, "Seems we failed to properly connect to the WiFi");
-    ESP_ERROR_CHECK(esp_wifi_stop());
-
-    network_context_t *ctx = (network_context_t *)arg;
-    wifi_init_ap(ctx);
 }
 
 void wifi_init(network_context_t *ctx)
@@ -134,7 +155,15 @@ void wifi_init(network_context_t *ctx)
 
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+#ifdef WIFI_SSID
+    ESP_LOGI(TAG, "Using preconfigured WiFi config");
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
 
+    ESP_LOGI(TAG, "wifi_init_sta finished. connecting to ap SSID: %s", wifi_config.sta.password);
+#else
+#error "Standalone AP mode is net yet supported, please specific WIFI_SSID and WIFI_PSK in wifi_creds.h"
     wifi_client_config_t *client_config = (wifi_client_config_t *)malloc(sizeof(wifi_client_config_t));
     if (!loadSettings(WIFI_SETTINGS, client_config))
     {
@@ -151,18 +180,8 @@ void wifi_init(network_context_t *ctx)
         ESP_ERROR_CHECK(esp_wifi_start());
 
         ESP_LOGI(TAG, "wifi_init_sta finished.");
-        ESP_LOGI(TAG, "connect to ap SSID:%s", client_config->ssid);
-
-        connect_timeout_timer_args = {
-            .callback = &connect_timeout_timer_callback,
-            .arg = (void *)ctx,
-            .dispatch_method = ESP_TIMER_TASK,
-            .name = "wifi_connect_timeout"};
-
-        ESP_LOGI(TAG, "Creating WiFi connect timeout timer");
-        ESP_ERROR_CHECK(esp_timer_create(&connect_timeout_timer_args, &connect_timeout_timer));
-        ESP_LOGI(TAG, "Starting WiFi connect timeout timer");
-        ESP_ERROR_CHECK(esp_timer_start_once(connect_timeout_timer, 30000000));
+        ESP_LOGI(TAG, "connect to ap SSID: %s", client_config->ssid);
     }
     free(client_config);
+#endif
 }
