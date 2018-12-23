@@ -62,11 +62,14 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
     {
         ESP_LOGW(TAG, "Disconnected from WiFi");
 
+#ifndef WIFI_SSID
         if (s_retry_num < CONFIG_ESP_MAXIMUM_RETRY)
         {
+#endif
             ESP_LOGI(TAG, "Retry to connect to the AP. Try %d of %d", (s_retry_num + 1), CONFIG_ESP_MAXIMUM_RETRY);
             esp_wifi_connect();
             s_retry_num++;
+#ifndef WIFI_SSID
         }
         if (s_retry_num == CONFIG_ESP_MAXIMUM_RETRY)
         {
@@ -75,6 +78,7 @@ static esp_err_t esp_wifi_event_handler(void *ctx, system_event_t *event)
             ESP_ERROR_CHECK(esp_wifi_stop());
             wifi_init_ap(nCtx);
         }
+#endif
 
         break;
     }
