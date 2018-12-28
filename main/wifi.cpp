@@ -180,7 +180,7 @@ void wifi_init(network_context_t *ctx)
 
     ESP_LOGI(TAG, "wifi_init_sta finished. connecting to ap SSID: %s", wifi_config.sta.password);
 #else
-#error "Standalone AP mode is net yet supported, please specific WIFI_SSID and WIFI_PSK in wifi_creds.h"
+    //#error "Standalone AP mode is net yet supported, please specific WIFI_SSID and WIFI_PSK in wifi_creds.h"
     wifi_client_config_t *client_config = (wifi_client_config_t *)malloc(sizeof(wifi_client_config_t));
     if (!loadSettings(WIFI_SETTINGS, client_config))
     {

@@ -17,6 +17,7 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX_SCAN_APS 15
+#define ERR_MSG_BLE_NOT_STARTED "BLE not yet started"
 
 ESP_EVENT_DEFINE_BASE(WIFI_SCAN_EVENT)
 
@@ -53,9 +54,18 @@ static cJSON *serialize_system(ibbq_state_t *bbq_state)
     char serial[12];
     snprintf(serial, sizeof(serial), "%02X%02X%02X%02X%02X%02X", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
     cJSON_AddStringToObject(system, "serial", serial);
-    cJSON_AddBoolToObject(system, "ibbq_connected", bbq_state->connected);
-    cJSON_AddNumberToObject(system, "ibbq_rssi", bbq_state->rssi);
-    cJSON_AddNumberToObject(system, "soc", bbq_state->battery_percent);
+    if (bbq_state)
+    {
+        cJSON_AddBoolToObject(system, "ibbq_connected", bbq_state->connected);
+        cJSON_AddNumberToObject(system, "ibbq_rssi", bbq_state->rssi);
+        cJSON_AddNumberToObject(system, "soc", bbq_state->battery_percent);
+    }
+    else
+    {
+        cJSON_AddBoolToObject(system, "ibbq_connected", false);
+        cJSON_AddNumberToObject(system, "ibbq_rssi", 0);
+        cJSON_AddNumberToObject(system, "soc", 0);
+    }
 
     wifi_ap_record_t ap_info;
     esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
@@ -174,19 +184,22 @@ static esp_err_t data_handler(httpd_req_t *req)
 
     cJSON *channels = cJSON_CreateArray();
     cJSON_AddItemToObject(root, "channel", channels);
-    for (int i = 0; i < bbq_state->probe_count; i++)
+    if (bbq_state)
     {
-        cJSON *data = cJSON_CreateObject();
-        cJSON_AddNumberToObject(data, "number", i + 1);
-        cJSON_AddStringToObject(data, "type", "iBBQ");
-        cJSON_AddStringToObject(data, "name", bbq_state->probes[i].name);
-        cJSON_AddNumberToObject(data, "temp", bbq_state->temps[i]);
-        cJSON_AddNumberToObject(data, "min", bbq_state->probes[i].min);
-        cJSON_AddNumberToObject(data, "max", bbq_state->probes[i].max);
-        cJSON_AddStringToObject(data, "color", bbq_state->probes[i].color);
-        //cJSON_AddBoolToObject(data, "alarm", bbq_state->probes[i].alarmEnabled);
+        for (int i = 0; i < bbq_state->probe_count; i++)
+        {
+            cJSON *data = cJSON_CreateObject();
+            cJSON_AddNumberToObject(data, "number", i + 1);
+            cJSON_AddStringToObject(data, "type", "iBBQ");
+            cJSON_AddStringToObject(data, "name", bbq_state->probes[i].name);
+            cJSON_AddNumberToObject(data, "temp", bbq_state->temps[i]);
+            cJSON_AddNumberToObject(data, "min", bbq_state->probes[i].min);
+            cJSON_AddNumberToObject(data, "max", bbq_state->probes[i].max);
+            cJSON_AddStringToObject(data, "color", bbq_state->probes[i].color);
+            //cJSON_AddBoolToObject(data, "alarm", bbq_state->probes[i].alarmEnabled);
 
-        cJSON_AddItemToArray(channels, data);
+            cJSON_AddItemToArray(channels, data);
+        }
     }
 
     char *jsonString = NULL;
@@ -209,6 +222,12 @@ static httpd_uri_t data_route = {
 static esp_err_t data_set_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
+    if (!bbq_state)
+    {
+        httpd_resp_set_status(req, "404");
+        httpd_resp_send(req, ERR_MSG_BLE_NOT_STARTED, sizeof(ERR_MSG_BLE_NOT_STARTED));
+        return ESP_OK;
+    }
     char buf[2048];
     int ret, remaining = req->content_len;
 
@@ -216,6 +235,7 @@ static esp_err_t data_set_handler(httpd_req_t *req)
     {
         ESP_LOGW(TAG, "Received request with %d bytes, which is larger than buf with %d bytes", remaining, sizeof(buf));
         httpd_resp_set_status(req, "400");
+        httpd_resp_send_chunk(req, NULL, 0);
         return ESP_OK;
     }
 
@@ -616,6 +636,12 @@ static httpd_uri_t setnetwork_route{
 static esp_err_t setchannels_handler(httpd_req_t *req)
 {
     ibbq_state_t *bbq_state = (ibbq_state_t *)req->user_ctx;
+    if (!bbq_state)
+    {
+        httpd_resp_set_status(req, "404");
+        httpd_resp_send(req, ERR_MSG_BLE_NOT_STARTED, sizeof(ERR_MSG_BLE_NOT_STARTED));
+        return ESP_OK;
+    }
 
     char buf[1024];
     int ret, remaining = req->content_len;

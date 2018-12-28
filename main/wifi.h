@@ -6,7 +6,7 @@
 
 #include "ibbq.h"
 #include "settings.h"
-#include "wifi_creds.h"
+//#include "wifi_creds.h"
 
 #ifdef __cplusplus
 extern "C"
