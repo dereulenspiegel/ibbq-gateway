@@ -18,7 +18,8 @@ extern "C"
         IBBQ_DISCOVERED,
         IBBQ_CONNECTED,
         IBBQ_AUTHENTICATED,
-        IBBQ_REQUEST_STATE
+        IBBQ_REQUEST_STATE,
+        IBBQ_DISCONNECT
     };
 
 #ifdef __cplusplus

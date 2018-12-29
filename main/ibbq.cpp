@@ -12,6 +12,7 @@
 
 #define MAX_VOLTAGE 6550
 #define BATTERY_INTERVAL 30000000
+#define BLE_CONNECT_TIMEOUT 10000000
 
 static const char *TAG = "iBBQ-BLE";
 
@@ -37,7 +38,15 @@ esp_event_loop_handle_t ble_loop;
 static ibbq_state_t ctx = {};
 
 static void battery_timer_callback(void *arg);
+static void connect_timeout_timer_callback(void *arg);
+static esp_timer_handle_t ble_timeout_timer;
 static esp_timer_handle_t battery_timer;
+
+static esp_timer_create_args_t ble_timeout_timer_args = {
+    .callback = &connect_timeout_timer_callback,
+    .arg = (void *)&ctx,
+    .dispatch_method = ESP_TIMER_TASK,
+    .name = "ble_timeout"};
 
 static esp_timer_create_args_t battery_timer_args = {
     .callback = &battery_timer_callback,
@@ -46,9 +55,54 @@ static esp_timer_create_args_t battery_timer_args = {
     .dispatch_method = ESP_TIMER_TASK,
     .name = "request_battery"};
 
+class MyBLECLientCallbacks : public BLEClientCallbacks
+{
+    void onConnect(BLEClient *pClient)
+    {
+        ESP_LOGI(TAG, "iBBQ BLE client connected callback");
+    }
+
+    void onDisconnect(BLEClient *pClient)
+    {
+        //pClient->disconnect();
+        esp_timer_stop(battery_timer);
+        ESP_ERROR_CHECK(esp_event_post_to(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, NULL, 0, portMAX_DELAY));
+    }
+};
+
+static MyBLECLientCallbacks *clientCallbacks = new MyBLECLientCallbacks();
+
+static void init_ble(ibbq_state_t *ctx)
+{
+    ESP_LOGI(TAG, "Initialising BLE");
+    BLEDevice::init("");
+
+    ctx->pBLEScan = BLEDevice::getScan();
+    ctx->pBLEScan->setActiveScan(true);
+    ctx->pBLEScan->setInterval(0x90);
+    ctx->pBLEScan->setWindow(0x10);
+
+    ctx->pClient = BLEDevice::createClient();
+    ctx->pClient->setClientCallbacks(clientCallbacks);
+}
+
 static void battery_timer_callback(void *arg)
 {
     ESP_ERROR_CHECK(esp_event_post_to(ble_loop, IBBQ_EVENTS, IBBQ_REQUEST_STATE, NULL, 0, portMAX_DELAY));
+}
+
+static void connect_timeout_timer_callback(void *arg)
+{
+    ESP_LOGW(TAG, "BLE connection timed out, restarting BLE");
+    ibbq_state_t *ctx = (ibbq_state_t *)arg;
+    ctx->pClient->setClientCallbacks(NULL);
+    ESP_LOGI(TAG, "Forcing disconnect");
+    ctx->pClient->disconnect();
+
+    ESP_LOGI(TAG, "BLE deinit for full restart");
+    BLEDevice::deinit(true);
+    init_ble(ctx);
+    ESP_ERROR_CHECK(esp_event_post_to(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, ctx, sizeof(ibbq_state_t), portMAX_DELAY));
 }
 
 static void start_battery_timer(ibbq_state_t *ctx)
@@ -190,30 +244,14 @@ bool subscribeToCharacteristic(BLEClient *pClient, BLEUUID uuid, void (*notifyCa
     return true;
 }
 
-class MyBLECLientCallbacks : public BLEClientCallbacks
-{
-    void onConnect(BLEClient *pClient)
-    {
-        ESP_LOGI(TAG, "iBBQ BLE client connected callback");
-    }
-
-    void onDisconnect(BLEClient *pClient)
-    {
-        //pClient->disconnect();
-        esp_timer_stop(battery_timer);
-        ESP_ERROR_CHECK(esp_event_post_to(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, NULL, 0, portMAX_DELAY));
-    }
-};
-
-static MyBLECLientCallbacks *clientCallbacks = new MyBLECLientCallbacks();
-
 void ble_scan_finished(BLEScanResults results)
 {
     ESP_LOGI(TAG, "Discovered %d BLE devices", results.getCount());
     for (uint32_t i = 0; i < results.getCount(); i++)
     {
         BLEAdvertisedDevice dev = results.getDevice(i);
-        if (dev.getName() == "iBBQ")
+        ESP_LOGI(TAG, "Discovered device %s", dev.toString().c_str());
+        if (dev.getName() == "iBBQ" || dev.isAdvertisingService(serviceUUID))
         {
             //dev.getScan()->stop();
             ESP_LOGI(TAG, "Found iBBQ device (%s)", dev.getAddress().toString().c_str());
@@ -233,8 +271,9 @@ static void device_discovered(void *handler_args, esp_event_base_t base, int32_t
 
     //ESP_LOGI(TAG, "Discovered device: %s", dev->toString().c_str());
 
-    ESP_LOGI(TAG, "Connecting to device address (%s)", dev->getAddress().toString().c_str());
-
+    ESP_LOGI(TAG, "Connecting to device address (%s), starting timeout timer for %d seconds",
+             dev->getAddress().toString().c_str(), (BLE_CONNECT_TIMEOUT / 1000000));
+    ESP_ERROR_CHECK(esp_timer_start_once(ble_timeout_timer, BLE_CONNECT_TIMEOUT));
     if (!ctx->pClient->connect(dev->getAddress()))
     {
         ESP_LOGE(TAG, "Failed to connect to device %s", dev->getAddress().toString().c_str());
@@ -252,6 +291,7 @@ static void device_connected(void *handler_args, esp_event_base_t base, int32_t 
     else
     {
         ESP_LOGI(TAG, "Client seems to be connected");
+        esp_timer_stop(ble_timeout_timer);
     }
 
     /*std::map<std::string, BLERemoteService *>::iterator serviceIt;
@@ -362,15 +402,7 @@ ibbq_state_t *init_ibbq()
 {
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
     ESP_LOGI(TAG, "Initialising BLE for iBBQ");
-    BLEDevice::init("");
-
-    ctx.pBLEScan = BLEDevice::getScan();
-    ctx.pBLEScan->setActiveScan(true);
-    ctx.pBLEScan->setInterval(0x90);
-    ctx.pBLEScan->setWindow(0x10);
-
-    ctx.pClient = BLEDevice::createClient();
-    ctx.pClient->setClientCallbacks(clientCallbacks);
+    init_ble(&ctx);
 
     esp_event_loop_args_t ble_loop_args = {
         .queue_size = 2,
@@ -380,6 +412,7 @@ ibbq_state_t *init_ibbq()
         .task_core_id = tskNO_AFFINITY};
 
     ESP_ERROR_CHECK(esp_timer_create(&battery_timer_args, &battery_timer));
+    ESP_ERROR_CHECK(esp_timer_create(&ble_timeout_timer_args, &ble_timeout_timer));
 
     ESP_ERROR_CHECK(esp_event_loop_create(&ble_loop_args, &ble_loop));
     ESP_ERROR_CHECK(esp_event_handler_register_with(ble_loop, IBBQ_EVENTS, IBBQ_START_SCAN, start_discovery_handler, &ctx));
